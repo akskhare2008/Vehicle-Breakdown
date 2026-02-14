@@ -1,1 +1,182 @@
+name: Predictive-Maintenance-CI-CD-Pipeline
 
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+env:
+  PYTHON_VERSION: "3.10"
+
+jobs:
+
+  setup:
+    name: Setup Environment
+    runs-on: ubuntu-latest
+    outputs:
+      python-version: ${{ steps.set-python.outputs.python-version }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set Python Version
+        id: set-python
+        run: echo "python-version=${{ env.PYTHON_VERSION }}" >> $GITHUB_OUTPUT
+
+
+  register-dataset:
+    name: Register Dataset
+    needs: setup
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ needs.setup.outputs.python-version }}
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r maintenance/deployment/requirements.txt
+
+      - name: Register Raw Dataset to HF
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python maintenance/model_building/data_register.py
+
+
+  data-preprocessing:
+    name: Data Preprocessing
+    needs: register-dataset
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ needs.setup.outputs.python-version }}
+
+      - name: Install Dependencies
+        run: pip install -r maintenance/deployment/requirements.txt
+
+      - name: Run Data Preprocessing
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python maintenance/model_building/prep.py
+
+
+  model-training:
+    name: Train Multiple Models
+    needs: data-preprocessing
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ needs.setup.outputs.python-version }}
+
+      - name: Install Dependencies
+        run: pip install -r maintenance/deployment/requirements.txt
+
+      - name: Train & Log Models
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python maintenance/model_building/train.py
+
+
+  model-evaluation:
+    name: Evaluate & Select Best Model
+    needs: model-training
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ needs.setup.outputs.python-version }}
+
+      - name: Install Dependencies
+        run: pip install -r maintenance/deployment/requirements.txt
+
+      - name: Evaluate Models
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python maintenance/model_building/evaluate_and_select.py
+
+
+  model-registration:
+    name: Register Best Model to Hugging Face
+    needs: model-evaluation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ needs.setup.outputs.python-version }}
+
+      - name: Install Dependencies
+        run: pip install -r maintenance/deployment/requirements.txt
+
+      - name: Upload Best Model
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python maintenance/model_building/register_best_model.py
+
+
+  update-model-card:
+    name: Update Model Card
+    needs: model-registration
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ needs.setup.outputs.python-version }}
+
+      - name: Install Dependencies
+        run: pip install huggingface_hub
+
+      - name: Push Model Card
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python maintenance/model_building/update_model_card.py
+
+
+  deploy:
+    name: Deploy Streamlit App to HF Spaces
+    needs: update-model-card
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ needs.setup.outputs.python-version }}
+
+      - name: Install Dependencies
+        run: pip install -r maintenance/deployment/requirements.txt
+
+      - name: Deploy to Hugging Face Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python maintenance/hosting/hosting.py
