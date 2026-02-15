@@ -1,0 +1,14 @@
+artifact_uri: mlflow-artifacts:/221349527524990793/77e68965b1624b3bad0f630a332253e9/artifacts
+end_time: 1771144852279
+entry_point_name: ''
+experiment_id: '221349527524990793'
+lifecycle_stage: active
+run_id: 77e68965b1624b3bad0f630a332253e9
+run_name: adaboost
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1771144796419
+status: 3
+tags: []
+user_id: root
